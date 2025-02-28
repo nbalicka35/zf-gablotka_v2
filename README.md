@@ -21,15 +21,16 @@ Aby uruchomić aplikację, wymagane są następujące wersje narzędzi:
     App.js           # Główna aplikacja
 
 ## Sposób uruchamiania:
-1. **Zainstaluj Expo CLI** (jeśli jeszcze nie masz):
-   ```
-   npm install -g expo-cli
-   ```
+1. **Zainstaluj wymagane narzędzia** (jeśli jeszcze nie masz)
 2. Zainstaluj zależności projektu:
    ```
    npm install
    ```
-4. Uruchom aplikację:
+3. Przejdź do lokalizacji projektu:
+   ```
+   cd C:/path/to/your/project
+   ```
+5. Uruchom aplikację:
    ```
    npm start
    ```
