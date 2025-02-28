@@ -12,11 +12,13 @@ Aby uruchomić aplikację, wymagane są następujące wersje narzędzi:
 ## Struktura plików:
 
     /app
+      ├── /assets          # Komponenty plikowe (np. zdjęcia)
       ├── /components      # Komponenty UI (Cabinet, Buttons, Background)
-      ├── /screens         # Ekrany aplikacji (WelcomeScreen, MainScreen)
       ├── /constants       # Stałe wartości (np. kolory)
+      ├── /fonts           # Czcionki (Prometo)
+      ├── /screens         # Ekrany aplikacji
       ├── /toggleObjects   # Logika zmiany stanów
-      └── App.js           # Główna aplikacja
+    App.js           # Główna aplikacja
 
 ## Sposób uruchamiania:
 1. **Zainstaluj Expo CLI** (jeśli jeszcze nie masz):
@@ -58,3 +60,7 @@ Technologie
     React Navigation - Do nawigacji między ekranami.
     Expo - Środowisko do budowy aplikacji.
     Arduino Uno R4 WiFi - Główne urządzenie, którym steruje aplikacja.
+
+## Stan aplikacji i koncept docelowy:
+Na chwilę obecną aplikacja nie ma zaimplementowanego modelu BLE (Bluetooth Low Energy) oraz nie ma skończonego UI.
+Koncept aplikacji można znaleźć [tutaj](https://www.figma.com/design/iZmbK1VegNtcDiAbvrVDdF/ZF-Gablotka-V3?m=auto&t=xKcmbQK0f2CaXZeO-1).
