@@ -21,7 +21,7 @@ Aby uruchomić aplikację, wymagane są następujące wersje narzędzi:
     App.js           # Główna aplikacja
 
 ## Sposób uruchamiania:
-1. **Zainstaluj wymagane narzędzia** (jeśli jeszcze nie masz) <br>
+1. **Zainstaluj wymagane narzędzia** (jeśli jeszcze nie masz) <br><br>
 2. Zainstaluj zależności projektu:
    ```
    npm install
