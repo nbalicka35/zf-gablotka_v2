@@ -22,6 +22,7 @@ Aby uruchomić aplikację, wymagane są następujące wersje narzędzi:
 
 ## Sposób uruchamiania:
 1. **Zainstaluj wymagane narzędzia** (jeśli jeszcze nie masz)
+   
 2. Zainstaluj zależności projektu:
    ```
    npm install
@@ -30,7 +31,7 @@ Aby uruchomić aplikację, wymagane są następujące wersje narzędzi:
    ```
    cd C:/path/to/your/project
    ```
-5. Uruchom aplikację:
+4. Uruchom aplikację:
    ```
    npm start
    ```
