@@ -1,52 +1,63 @@
-// A basic everyday NeoPixel strip test program.
-
-// NEOPIXEL BEST PRACTICES for most reliable operation:
-// - Add 1000 uF CAPACITOR between NeoPixel strip's + and - connections.
-// - MINIMIZE WIRING LENGTH between microcontroller board and first pixel.
-// - NeoPixel strip's DATA-IN should pass through a 300-500 OHM RESISTOR.
-// - AVOID connecting NeoPixels on a LIVE CIRCUIT. If you must, ALWAYS
-//   connect GROUND (-) first, then +, then data.
-// - When using a 3.3V microcontroller with a 5V-powered NeoPixel strip,
-//   a LOGIC-LEVEL CONVERTER on the data line is STRONGLY RECOMMENDED.
-// (Skipping these may work OK on your workbench but can fail in the field)
+#include <stdio.h>
+#include <DS1302.h>
+#include <Wire.h>
 #include <math.h>
-#include "RTC.h"
-#include <Adafruit_NeoPixel.h>
-#include "DFRobot_VEML7700.h" /* sensor library */
+#include <Adafruit_NeoPixel.h>  /* library for the LED strip control https://github.com/adafruit/Adafruit_NeoPixel/blob/master/examples/strandtest/strandtest.ino */
+#include "DFRobot_VEML7700.h" /* ambient light sensor library */
 
-//#include <winuser.h> wil be needed later
 #ifdef __AVR__
  #include <avr/power.h> // Required for 16 MHz Adafruit Trinket
 #endif
 
-// Which pin on the Arduino is connected to the NeoPixels?
-// On a Trinket or Gemma we suggest changing this to 1:
-#define LED_PIN    5
-#define MOTION_SENSOR_PIN 2
 
-// How many NeoPixels are attached to the Arduino?
-#define LED_COUNT 50
-#define ECHO_PIN 8
-#define TRIGGER_PIN 7
-#define MAX_DISTANCE_CM 150
-#define BRIGHTNESS_VALUE 60
-#define buton_pin 4
-// Declare our NeoPixel strip object:
-Adafruit_NeoPixel strip(LED_COUNT, LED_PIN, NEO_GRB + NEO_KHZ800);
+#define LED_COUNT 50 /* @define Amount of addressable pixels on the LED strip, max is 50, but if you wish to change the limit below this threshold, you can do it here */
+#define MAX_DISTANCE_CM 150 /* @define max distance which will be acceptable by our system, subject to changes in the future */
+#define BRIGHTNESS_VALUE 60 /* @define limits the light intensity in breathe function, subject to change*/
+
+
+
+
+#define ECHO_PIN 8 /* @pin where to plug ultrasonic sensor, specifically ECHO pin, which listens for the incoming wave*/
+#define TRIGGER_PIN 7 /* @pin where to plug ultrasonic sensor, specifically TRIGGER pin, which emits the wave*/
+#define LED_PIN    6 /* @pin where to plug LED strip */
+#define MOTION_SENSOR_PIN 2 /* @pin where to plug motion sensor */
+
+namespace {
+  // DS1302 RTC pins
+  const int kCePin   = 5;  // Chip Enable
+  const int kIoPin   = 7;  // Input/Output (changed from 6 to avoid conflict with LED_PIN)
+  const int kSclkPin = 8;  // Serial Clock (changed from 7 to avoid conflicts)
+  
+  // Create a DS1302 object
+  DS1302 rtc(kCePin, kIoPin, kSclkPin);
+  
+  // Create NeoPixel object
+  Adafruit_NeoPixel strip(NUM_LEDS, LED_PIN, NEO_GRB + NEO_KHZ800);
+  
+  // Variables for RTC refresh timing
+  unsigned long lastRtcRefreshTime = 0;
+  const unsigned long rtcRefreshInterval = 30 * 60 * 1000; // 30 minutes in milliseconds
+  // Initialize with a placeholder value, will be updated in setup
+  Time rtcTimeCache(2025, 1, 1, 0, 0, 0, Time::kWednesday);
+  
+  String dayAsString(const Time::Day day) {
+    switch (day) {
+      case Time::kSunday: return "Sunday";
+      case Time::kMonday: return "Monday";
+      case Time::kTuesday: return "Tuesday";
+      case Time::kWednesday: return "Wednesday";
+      case Time::kThursday: return "Thursday";
+      case Time::kFriday: return "Friday";
+      case Time::kSaturday: return "Saturday";
+    }
+    return "(unknown day)";
+  }
+
+Adafruit_NeoPixel strip(LED_COUNT, LED_PIN, NEO_GRB + NEO_KHZ800); // Declare our NeoPixel strip object
 DFRobot_VEML7700 als; /* instance of als object */
 
-// Argument 1 = Number of pixels in NeoPixel strip
-// Argument 2 = Arduino pin number (most are valid)
-// Argument 3 = Pixel type flags, add together as needed:
-//   NEO_KHZ800  800 KHz bitstream (most NeoPixel products w/WS2812 LEDs)
-//   NEO_KHZ400  400 KHz (classic 'v1' (not v2) FLORA pixels, WS2811 drivers)
-//   NEO_GRB     Pixels are wired for GRB bitstream (most NeoPixel products)
-//   NEO_RGB     Pixels are wired for RGB bitstream (v1 FLORA pixels, not v2)
-//   NEO_RGBW    Pixels are wired for RGBW bitstream (NeoPixel RGBW products)
-
-
-// setup() function -- runs once at startup --------------------------------
-enum brightness_levels{
+/* @enum these serve purpose of setting brightness levels, left for later use */
+enum brightnessLevels_e{
   very_dark = 12,
   dark = 25,
   light_dark = 50,
@@ -58,6 +69,7 @@ enum brightness_levels{
   strong_bright = 600,
   max_brightness = 700
 };
+/* @enum these serve purpose of distance declaration, should be used within distance_checker function */
 enum distance_e{
   closest = 10,
   closer = 20,
@@ -66,108 +78,142 @@ enum distance_e{
   further = 50,
   furthest = 60
 };
+/* @enum these serve purpose of defining button states, which are not yet implemented due to time constraint, subject to change*/
+
 enum button_states : byte{
     undefined = 0,
     prev = 1,
     next = 2,
     colorChange = 3
 };
-void distance_checker(int distance_in_cm){
-    Serial.print("Distance (in cm): ");
-    Serial.println(distance_in_cm);
-    Serial.println();
-if(distance_in_cm <= 10){
-      for(int i=0; i<strip.numPixels() && i>50; i++) { // For each pixel in strip...
-          strip.setPixelColor(i, strip.Color(0,0,0));  
-          strip.show();        //  Set pixel's color (in RAM)                           //  Pause for a moment
-          }
-          for(int i=0; i<50; i++) { // For each pixel in strip...
-          strip.setPixelColor(i, strip.Color(0,0,255));  
-          strip.show();        //  Set pixel's color (in RAM)                           //  Pause for a moment
-          }strip.show();        //  Set pixel's color (in RAM)                           //  Pause for a moment
+
+/*
+@brief Chekcs for the distance by calculating how long it took for a generated sound wave to come back to the sensor
+For further references seek information in the docs: https://www.micros.com.pl/mediaserver/M_HY-SRF05_0003.pdf
+*/
+void distance_checker(){
+  digitalWrite(TRIGGER_PIN, LOW);
+  delayMicroseconds(5);
+  /* transmit 4kHz wave for 10 us */
+  digitalWrite(TRIGGER_PIN, HIGH);
+  delayMicroseconds(10);
+  digitalWrite(TRIGGER_PIN, LOW);
+
+  /* measure for how many microseconds echo pin is in high state (receives signal) */
+  int duration = pulseIn(ECHO_PIN, HIGH);
+  /* sound velocity = 340 m/s => 0.034 cm/us, divided by 2 because distance is doubled (signal transmitted and then received) */
+  int distance_in_cm = duration * 0.034 / 2;
+  Serial.print("Distance (in cm): ");
+  Serial.println(distance_in_cm);
+  Serial.println();
+  /* checks for the amount of pixels needed to be activated in relation to the distance bracket. Further the reigstered object, less pixels will be activated. Arbitrary distance ranges made for easier debugging, needs adjustments before releasing for production.*/
+  if(distance_in_cm <= 10){
+    //first loops are always responsible for "clearing" colors by setting it to black. I HIGHY DISCOURAGE from setting brightness to 0, since strip would always require activation and it might be impractical.
+    for(int i=0; i<strip.numPixels() && i>50; i++) { 
+      strip.setPixelColor(i, strip.Color(0,0,0));  
+      strip.show();        
     }
-    else if(distance_in_cm > 10 && distance_in_cm <= 20){
-      for(int i=0; i<strip.numPixels() && i>40; i++) { // For each pixel in strip...
-          strip.setPixelColor(i, strip.Color(0,0,0));  
-          strip.show();        //  Set pixel's color (in RAM)                           //  Pause for a moment
-          }
-          for(int i=0; i<40; i++) { // For each pixel in strip...
-          strip.setPixelColor(i, strip.Color(0,0,255));  
-          strip.show();        //  Set pixel's color (in RAM)                           //  Pause for a moment
-          }strip.show();        //  Set pixel's color (in RAM)                           //  Pause for a moment
+    for(int i=0; i<50; i++) { 
+      strip.setPixelColor(i, strip.Color(0,0,255));  
+      strip.show();        
+    }       
+  }
+  else if(distance_in_cm > 10 && distance_in_cm <= 20){
+    for(int i=0; i<strip.numPixels() && i>40; i++) { 
+      strip.setPixelColor(i, strip.Color(0,0,0));  
+      strip.show();        
     }
-    else if (distance_in_cm > 20 && (distance_in_cm <= 30)){
-      for(int i=0; i<strip.numPixels() && i>30; i++) { // For each pixel in strip...
-          strip.setPixelColor(i, strip.Color(0,0,0));  
-          strip.show();        //  Set pixel's color (in RAM)                           //  Pause for a moment
-          }
-          for(int i=0; i<30; i++) { // For each pixel in strip...
-          strip.setPixelColor(i, strip.Color(0,0,255));  
-          strip.show();        //  Set pixel's color (in RAM)                           //  Pause for a moment
-          }strip.show(); 
+    for(int i=0; i<40; i++) { 
+      strip.setPixelColor(i, strip.Color(0,0,255));  
+      strip.show();        
     }
-    else if (distance_in_cm > 30 && (distance_in_cm <= 40)){
-      
-          for(int i=20; i<strip.numPixels(); i++) { // For each pixel in strip...
-          strip.setPixelColor(i, strip.Color(0,0,0));  
-          strip.show();        //  Set pixel's color (in RAM)                           //  Pause for a moment
-          }
-          for(int i=0; i<20; i++) { // For each pixel in strip...
-          strip.setPixelColor(i, strip.Color(0,0,255));  
-          strip.show();        //  Set pixel's color (in RAM)                           //  Pause for a moment
-          }strip.show(); 
+                
+  }
+  else if (distance_in_cm > 20 && (distance_in_cm <= 30)){
+    for(int i=0; i<strip.numPixels() && i>30; i++) { 
+      strip.setPixelColor(i, strip.Color(0,0,0));  
+      strip.show();        
     }
-    else if (distance_in_cm > 40 && (distance_in_cm <= 50)){
-      
-          for(int i=10; i<strip.numPixels(); i++) { // For each pixel in strip...
-          strip.setPixelColor(i, strip.Color(0,0,0));  
-          strip.show();        //  Set pixel's color (in RAM)                           //  Pause for a moment
-          }
-          for(int i=0; i<10; i++) { // For each pixel in strip...
-          strip.setPixelColor(i, strip.Color(0,0,255));  
-          strip.show();        //  Set pixel's color (in RAM)                           //  Pause for a moment
-          }strip.show(); 
+    for(int i=0; i<30; i++) { 
+      strip.setPixelColor(i, strip.Color(0,0,255));  
+      strip.show();        
+    } 
+  }
+  else if (distance_in_cm > 30 && (distance_in_cm <= 40)){
+    for(int i=20; i<strip.numPixels(); i++) { 
+      strip.setPixelColor(i, strip.Color(0,0,0));  
+      strip.show();        
     }
-    else {
-      for(int i=0; i<50; i++) { // For each pixel in strip...
-          strip.setPixelColor(i, strip.Color(0,0,0));  
-          strip.show();        //  Set pixel's color (in RAM)                           //  Pause for a moment
-          }strip.show(); 
+    for(int i=0; i<20; i++) { 
+      strip.setPixelColor(i, strip.Color(0,0,255));  
+      strip.show();        
     }
+  }
+  else if (distance_in_cm > 40 && (distance_in_cm <= 50)){
+    for(int i=10; i<strip.numPixels(); i++) { 
+      strip.setPixelColor(i, strip.Color(0,0,0));  
+      strip.show();        
+    }
+    for(int i=0; i<10; i++) { 
+      strip.setPixelColor(i, strip.Color(0,0,255));  
+      strip.show();        
+    }
+  }
+  else {
+    for(int i=0; i<50; i++) { 
+      strip.setPixelColor(i, strip.Color(0,0,0));  
+      strip.show();        
+    } 
+  }
 
 }
+
+/* @brief Emulates a breathing effect. 
+   
+  @param del - delay (in miliseconds) passed to the delay function, type unsigned integer
+  @param color - 32 bit definition of color created by strip.Color() function, don't input your own values if you don't know what you are doing
+*/
 void breathe(uint32_t del,uint32_t color){
-
-      for(int i=0; i<strip.numPixels(); i++) { // For each pixel in strip...
-         strip.setPixelColor(i, color);  
-                 //  Set pixel's color (in RAM)                           //  Pause for a moment
-       }
-       strip.show();
-      for(int i =1; i < (BRIGHTNESS_VALUE / 10) + 1;i++){
-        strip.setBrightness(i*10);
-        strip.show();
-        delay(50);
-      }
-      
-    delay(del);
-    for(int i =(BRIGHTNESS_VALUE / 10); i > 0;i--){
-        strip.setBrightness(i*10);
-        strip.show();
-        delay(50);
-        
-      }
-      for(int i=0; i<strip.numPixels(); i++) { // For each pixel in strip...
-        strip.setPixelColor(i, color);  
-                //  Set pixel's color (in RAM)                           //  Pause for a moment
-      }
-      strip.show();
+  /* This loop is responsible for setting defined color */
+  for(int i=0; i<strip.numPixels(); i++) {
+    strip.setPixelColor(i, color);  
+  }
+  /* DON'T REMOVE THESE SINCE THEY ARE REQUIRED TO APPLY CHANGES MADE TO LED STRIP */
+  strip.show();
+  /* First "wave" of the breathing effect */
+  for(int i =1; i < (BRIGHTNESS_VALUE / 10) + 1;i++){
+    strip.setBrightness(i*10);
+    strip.show();
+    delay(50);
+  }
+  /* This delay is required to emulate breathing effect. DON'T REMOVE */
+  delay(del);
+  
+  /* Second "wave" of the breathing effect */
+  for(int i = (BRIGHTNESS_VALUE / 10); i > 0;i--){
+    strip.setBrightness(i*10);
+    strip.show();
+    delay(50);
+  }
+  for(int i=0; i < strip.numPixels(); i++) {
+    strip.setPixelColor(i, color);  
+  }
+  strip.show();
 }
+
+/* 
+  @brief Function used for adjusting lighting intensity when LED is set to static color display mode. First iteration relied on adjusting lighting based on the sensor's measurmenet and statically checking ranges from enum.
+  Now we simply plug the measurement into log function and calculate it's respective value.
+  @Param illuminance - measurement registered from light sensor
+
+*/
 void ligthing_intensity(float illuminance){
   float logB = 255 * (log10((illuminance+1))/2)/ log10(120000+1);
   int mappedB = constrain((int)logB,0,255);
   Serial.println(mappedB);
   strip.setBrightness(mappedB);
   strip.show();
+  /* DON'T REMOVE, IT'S NOT ARCHIVED */
   // if(illuminance < very_dark){
   //   strip.setBrightness(6);
   //   strip.show();
@@ -210,14 +256,12 @@ void ligthing_intensity(float illuminance){
   // }
 }
 void setup() {
-  // These lines are specifically to support the Adafruit Trinket 5V 16 MHz.
-  // Any other board, you can remove this part (but no harm leaving it):
 #if defined(__AVR_ATtiny85__) && (F_CPU == 16000000)
   clock_prescale_set(clock_div_1);
 #endif
-  // END of Trinket-specific code.
   pinMode(MOTION_SENSOR_PIN, INPUT);
-  //delay(60000); // wait 60 seconds on startup, so 
+
+  //delay(60000); // wait 60 seconds on startup, comment for debugging, uncomment for production
   pinMode(ECHO_PIN, INPUT);
   pinMode(TRIGGER_PIN, OUTPUT);
   als.begin();
@@ -228,9 +272,9 @@ void setup() {
   strip.setBrightness(40);
   for(int i=0; i<strip.numPixels(); i++) { // For each pixel in strip...
           strip.setPixelColor(i, strip.Color(0,0,255));  
-                 //  Set pixel's color (in RAM)                           //  Pause for a moment
+                 //  Set pixel's color (in RAM)                           
           }
-strip.show();  // Set BRIGHTNESS to about 1/5 (max = 255)
+strip.show(); 
 }
 
 
@@ -243,168 +287,24 @@ void loop() {
   
   float illuminance, w_illuminance,a_illuminance, aw_illuminance;
   Serial.println(digitalRead(MOTION_SENSOR_PIN));
+  /* ALL BUSINESS LOGIC HAS TO BE INSERTED INTO THIS IF STATEMENT, since we anticipate the start of the flow from PIR activation. */
   if(digitalRead(MOTION_SENSOR_PIN) == HIGH){
-  als.getALSLux(illuminance); /* Illuminance measured */
-  Serial.print("Lux measured: ");
-  Serial.println(illuminance);
-  digitalWrite(TRIGGER_PIN, LOW);
-    delayMicroseconds(5);
-    /* transmit 4kHz wave for 10 us */
-    digitalWrite(TRIGGER_PIN, HIGH);
-    delayMicroseconds(10);
-    digitalWrite(TRIGGER_PIN, LOW);
-
-    /* measure for how many microseconds echo pin is in high state (receives signal) */
-    int duration = pulseIn(ECHO_PIN, HIGH);
-    /* sound velocity = 340 m/s => 0.034 cm/us, divided by 2 because distance is doubled (signal transmitted and then received) */
-    int distance_in_cm = duration * 0.034 / 2;
-
-    
-    
+    als.getALSLux(illuminance); /* Illuminance measured */
+    Serial.print("Lux measured: ");
+    Serial.println(illuminance);
+    distance_checker();
+    ligthing_intensity(illuminance);
+    /* For now this mode is optional, requires further integration with buttons */
     //breathe(3000,strip.Color(0,255,0));
     
-    ligthing_intensity(illuminance);
+    
     //tutaj moze delay, ale do przedyskutowania
     //delay(10);
-  }
-    // else{
-    //   for(int i=0; i<strip.numPixels(); i++) { // For each pixel in strip...
-    //   strip.setPixelColor(i, strip.Color(0,0,255));  
-    //   strip.show();        //  Set pixel's color (in RAM)                           //  Pause for a moment
-    //   }
-    // }
-    
-    // if (distance_in_cm <=MAX_DISTANCE_CM && check ==0){
-    //   check = 1;
-    //   for(int i=0; i<strip.numPixels(); i++) { // For each pixel in strip...
-    //      strip.setPixelColor(i, strip.Color(0,0,255));  
-    //              //  Set pixel's color (in RAM)                           //  Pause for a moment
-    //    }
-    //    //strip.setBrightness(1);
-    //    strip.show();
-    //   for(int i =1; i < 6;i++){
-    //     strip.setBrightness(i*10);
-    //     strip.show();
-    //     delay(50);
-    //   }
-    //   // for(int i=0; i<strip.numPixels(); i++) { // For each pixel in strip...
-    //   //  strip.setPixelColor(i, strip.Color(0,0,255));  
-    //   //  strip.show();        //  Set pixel's color (in RAM)                           //  Pause for a moment
-    //   // }
-    // }
-    
-    // else if(distance_in_cm >MAX_DISTANCE_CM && check ==1){
-    //   check = 0;
-    //   for(int i =5; i >=1;i--){
-    //     strip.setBrightness(i*10);
-    //     strip.show();
-    //     delay(50);
-        
-    //   }
-    //   for(int i=0; i<strip.numPixels(); i++) { // For each pixel in strip...
-    //     strip.setPixelColor(i, strip.Color(0,0,0));  
-    //             //  Set pixel's color (in RAM)                           //  Pause for a moment
-    //   }
-    //   strip.show();
-    // }
-  //delay(1000);
-  //strip.setBrightness(100);  
-  // Fill along the length of the strip in various colors...
-  // colorWipe(strip.Color(255,   0,   0), 50); // Red
-  // colorWipe(strip.Color(  0, 255,   0), 50); // Green
-  // // colorWipe(strip.Color(  0,   0, 255), 50); // Blue
-
-  // // Do a theater marquee effect in various colors...
-  // theaterChase(strip.Color(127, 127, 127), 50); // White, half brightness
-  // theaterChase(strip.Color(127,   0,   0), 50); // Red, half brightness
-  // theaterChase(strip.Color(  0,   0, 127), 50); // Blue, half brightness
-
-  // rainbow(10);             // Flowing rainbow cycle along the whole strip
-  // theaterChaseRainbow(50); // Rainbow-enhanced theaterChase variant
-  
-  /*als.getWhiteLux(w_illuminance);
-  als.getAutoALSLux(a_illuminance);
-  als.getAutoWhiteLux(aw_illuminance);
-  Serial.print(" white illuminance lux measured: ");
-  Serial.print(w_illuminance);
-  Serial.print(" auto illuminance lux measured: ");
-  Serial.print(a_illuminance);
-  Serial.print(" auto white illuminance lux measured: ");
-  Serial.println(aw_illuminance);*/
-  
+  }  
 }
 
 
-// Some functions of our own for creating animated effects -----------------
 
-// Fill strip pixels one after another with a color. Strip is NOT cleared
-// first; anything there will be covered pixel by pixel. Pass in color
-// (as a single 'packed' 32-bit value, which you can get by calling
-// strip.Color(red, green, blue) as shown in the loop() function above),
-// and a delay time (in milliseconds) between pixels.
-void colorWipe(uint32_t color, int wait) {
-  for(int i=0; i<strip.numPixels(); i++) { // For each pixel in strip...
-    strip.setPixelColor(i, color);         //  Set pixel's color (in RAM)
-    strip.show();                          //  Update strip to match
-    delay(wait);                           //  Pause for a moment
-  }
-}
 
-// Theater-marquee-style chasing lights. Pass in a color (32-bit value,
-// a la strip.Color(r,g,b) as mentioned above), and a delay time (in ms)
-// between frames.
-void theaterChase(uint32_t color, int wait) {
-  for(int a=0; a<10; a++) {  // Repeat 10 times...
-    for(int b=0; b<3; b++) { //  'b' counts from 0 to 2...
-      strip.clear();         //   Set all pixels in RAM to 0 (off)
-      // 'c' counts up from 'b' to end of strip in steps of 3...
-      for(int c=b; c<strip.numPixels(); c += 3) {
-        strip.setPixelColor(c, color); // Set pixel 'c' to value 'color'
-      }
-      strip.show(); // Update strip with new contents
-      delay(wait);  // Pause for a moment
-    }
-  }
-}
 
-// Rainbow cycle along whole strip. Pass delay time (in ms) between frames.
-void rainbow(int wait) {
-  // Hue of first pixel runs 5 complete loops through the color wheel.
-  // Color wheel has a range of 65536 but it's OK if we roll over, so
-  // just count from 0 to 5*65536. Adding 256 to firstPixelHue each time
-  // means we'll make 5*65536/256 = 1280 passes through this loop:
-  for(long firstPixelHue = 0; firstPixelHue < 5*65536; firstPixelHue += 256) {
-    // strip.rainbow() can take a single argument (first pixel hue) or
-    // optionally a few extras: number of rainbow repetitions (default 1),
-    // saturation and value (brightness) (both 0-255, similar to the
-    // ColorHSV() function, default 255), and a true/false flag for whether
-    // to apply gamma correction to provide 'truer' colors (default true).
-    strip.rainbow(firstPixelHue);
-    // Above line is equivalent to:
-    // strip.rainbow(firstPixelHue, 1, 255, 255, true);
-    strip.show(); // Update strip with new contents
-    delay(wait);  // Pause for a moment
-  }
-}
 
-// Rainbow-enhanced theater marquee. Pass delay time (in ms) between frames.
-void theaterChaseRainbow(int wait) {
-  int firstPixelHue = 0;     // First pixel starts at red (hue 0)
-  for(int a=0; a<30; a++) {  // Repeat 30 times...
-    for(int b=0; b<3; b++) { //  'b' counts from 0 to 2...
-      strip.clear();         //   Set all pixels in RAM to 0 (off)
-      // 'c' counts up from 'b' to end of strip in increments of 3...
-      for(int c=b; c<strip.numPixels(); c += 3) {
-        // hue of pixel 'c' is offset by an amount to make one full
-        // revolution of the color wheel (range 65536) along the length
-        // of the strip (strip.numPixels() steps):
-        int      hue   = firstPixelHue + c * 65536L / strip.numPixels();
-        uint32_t color = strip.gamma32(strip.ColorHSV(hue)); // hue -> RGB
-        strip.setPixelColor(c, color); // Set pixel 'c' to value 'color'
-      }
-      strip.show();                // Update strip with new contents
-      delay(wait);                 // Pause for a moment
-      firstPixelHue += 65536 / 90; // One cycle of color wheel over 90 frames
-    }
-  }
-}
