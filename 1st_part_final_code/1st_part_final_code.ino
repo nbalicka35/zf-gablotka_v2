@@ -5,6 +5,12 @@
 #include <Adafruit_NeoPixel.h>  /* library for the LED strip control https://github.com/adafruit/Adafruit_NeoPixel/blob/master/examples/strandtest/strandtest.ino */
 #include "DFRobot_VEML7700.h" /* ambient light sensor library */
 
+#include <ThreeWire.h>
+#include <RtcDS1302.h>
+
+ThreeWire myWire(4, 5, 3); // IO, SCLK, CE
+RtcDS1302<ThreeWire> Rtc(myWire);
+
 #ifdef __AVR__
  #include <avr/power.h> // Required for 16 MHz Adafruit Trinket
 #endif
@@ -23,13 +29,6 @@
 #define MOTION_SENSOR_PIN 2 /* @pin where to plug motion sensor */
 
 namespace {
-  // DS1302 RTC pins
-  const int kCePin   = 5;  // Chip Enable
-  const int kIoPin   = 7;  // Input/Output (changed from 6 to avoid conflict with LED_PIN)
-  const int kSclkPin = 8;  // Serial Clock (changed from 7 to avoid conflicts)
-  
-  // Create a DS1302 object
-  DS1302 rtc(kCePin, kIoPin, kSclkPin);
   
   // Create NeoPixel object
   Adafruit_NeoPixel strip(NUM_LEDS, LED_PIN, NEO_GRB + NEO_KHZ800);
